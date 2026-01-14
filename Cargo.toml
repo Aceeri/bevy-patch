@@ -1,6 +1,19 @@
 [package]
 name = "bevy-patch"
 version = "0.1.0"
+description = "Generate bevy patch lists"
+authors = ["Connor McCluskey <conmcclusk@gmail.com>"]
 edition = "2024"
+exclude = ["assets/", ".github/"]
+keywords = []
+repository = "https://github.com/aceeri/bevy-patch"
+documentation = "https://docs.rs/bevy-patch"
+license = "MIT OR Apache-2.0"
+rust-version = "1.88.0"
+readme = "README.md"
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.13", features = ["blocking", "json"] }
+serde = { version = "1", features = ["derive"] }
+anyhow = "1"
