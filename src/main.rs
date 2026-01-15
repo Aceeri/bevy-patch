@@ -77,33 +77,55 @@ fn fetch_crates_from_local(path: &str) -> Result<Vec<String>> {
     Ok(crates)
 }
 
-fn fetch_crates_from_github(repo: &str, git_ref: &str) -> Result<Vec<String>> {
-    if !repo.contains("github.com") {
-        // todo: error out here
-        return Err(anyhow::anyhow!(
-            "Repo is currently expected to be from github.com"
-        ));
+// Takes:
+// https://github.com/bevyengine/bevy
+// https://github.com/aceeri/bevy
+// http://github.com/aceeri/bevy -> https://...
+// github.com/aceeri/bevy -> https://github.com/...
+// aceeri/bevy -> https://github.com/aceeri/bevy
+// aceeri -> https://github.com/aceeri/bevy
+fn user_friendly_repo(repo: &str) -> String {
+    let mut corrected = repo.to_owned();
+
+    // aceeri -> aceeri/bevy
+    if !corrected.contains("/") {
+        corrected = format!("{}/bevy", corrected);
     }
 
-    let mut api_url = if repo.starts_with("github.com") {
-        "https://".to_owned() + repo
-    } else {
-        repo.to_owned()
-    };
+    // aceeri/bevy -> github.com/aceeri/bevy
+    if !corrected.contains("github.com/") {
+        corrected = format!("github.com/{}", corrected);
+    }
+
+    // http:// -> https://
+    corrected = corrected.replace("http://", "https://");
+
+    // github.com/aceeri/bevy -> https://github.com/aceeri/bevy
+    if !corrected.contains("https://") {
+        corrected = format!("https://{}", corrected);
+    }
+
+    corrected
+}
+
+fn api_url(repo: &str, git_ref: &str) -> String {
+    let repo = user_friendly_repo(repo);
+    let mut api_url = repo.replace("github.com/", "api.github.com/repos/");
 
     if api_url.ends_with(".git") {
         api_url = api_url[0..api_url.len() - 4].to_owned();
     }
 
-    api_url = api_url
-        .replace("http://", "https://")
-        .replace("github.com/", "api.github.com/repos/");
-
     let url = format!("{}/contents/crates?ref={}", api_url, git_ref);
+    url
+}
+
+fn fetch_crates_from_github(repo: &str, git_ref: &str) -> Result<Vec<String>> {
+    let api_url = api_url(repo, git_ref);
 
     let client = reqwest::blocking::Client::new();
     let response = client
-        .get(&url)
+        .get(&api_url)
         .timeout(Duration::from_secs(5))
         .header("User-Agent", "bevy-patch")
         .send()
@@ -156,7 +178,9 @@ fn main() -> Result<()> {
                 .or(rev.as_deref())
                 .unwrap_or("main");
 
-            let crates = fetch_crates_from_github(&repo, git_ref)?;
+            let repo = user_friendly_repo(&repo);
+            let crates = fetch_crates_from_github(&repo, git_ref)
+                .context(format!("Github url: {:?}, ref: {:?}", repo, git_ref))?;
 
             let specifier = if let Some(tag) = &tag {
                 format!("tag = \"{tag}\"")
